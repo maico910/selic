@@ -18,12 +18,7 @@ export class Selic {
     this.poupancaPercent = poupancaPercent;
   }
 
-  /**
-  * Fetch and calculate the brazilian selic, poupanca and cdi rates apy
-  *
-  * @returns {Array} list with selic, poupanca and cdi rates apy
-  */
-  async scrapRates(): Promise<Rate[]> {
+  async getAllRates() {
     const selic = await this.getSelicRate();
     const cdi = this.calculateCdiFromSelic(selic);
     const poupanca = this.calculatePoupancaFromSelic(selic);
@@ -64,24 +59,12 @@ export class Selic {
     return this.calculatePoupancaFromSelic(selic);
   }
 
-  /**
-  * Calculate the cdi rate from selic value
-  *
-  * @param {number} selic selic rate apy for calculation
-  * @returns {Number} cdi rates apy
-  */
-  calculateCdiFromSelic(selic: number): number {
+  calculateCdiFromSelic(selic = 0) {
     const cdi = selic - this.cdiScore;
     return Number(Number(cdi).toFixed(2));
   }
 
-  /**
-  * Calculate the poupanca rate from selic value
-  *
-  * @param {number} selic selic rate apy for calculation
-  * @returns {Number} poupanca rates apy
-  */
-  calculatePoupancaFromSelic(selic: number): number {
+  calculatePoupancaFromSelic(selic = 0) {
     const poupanca = (selic / 100) * this.poupancaPercent;
     return Number(Number(poupanca).toFixed(2));
   }
