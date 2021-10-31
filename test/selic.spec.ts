@@ -1,163 +1,77 @@
-import * as nock from 'nock'
-import { BCB_API, BCB_SELIC_PATH, CDI_SCORE, POUPANCA_PERCENT } from '../src/constants'
-import { Selic } from '../src/selic'
+import { fetchCurrentSelic } from './bcb'
+import { fetchCurrentCdi } from './cetip'
+import { POUPANCA_PERCENT } from './constants'
 
-describe('Selic', () => {
-  describe('.scrapRates', () => {
-    test('returns the selic, poupanca and cdi rates using custom options', async () => {
-      const fakeSelic = 10.1;
-      const fakeData = JSON.stringify([{ valor: fakeSelic }]);
+type Rate = {
+  name: string,
+  apy: number,
+}
 
-      nock(BCB_API).get(BCB_SELIC_PATH).reply(200, fakeData);
+export class Selic {
+  private poupancaPercent: number
 
-      const cdiScore = 0;
-      const poupancaPercent = 100;
-      const expectedValue = fakeSelic;
-      const selic = new Selic(cdiScore, poupancaPercent);
-      const rates = await selic.getAllRates();
+  constructor(
+    poupancaPercent: number = POUPANCA_PERCENT
+  ) {
+    this.poupancaPercent = poupancaPercent;
+  }
 
-      expect(rates[0].name).toBe('Selic');
-      expect(rates[0].apy).toBe(expectedValue);
-      expect(rates[1].name).toBe('CDI');
-      expect(rates[1].apy).toBe(expectedValue);
-      expect(rates[2].name).toBe('Poupança');
-      expect(rates[2].apy).toBe(expectedValue);
-    });
+  /**
+  * Calculate the poupanca rate from selic value
+  *
+  * @param {number} selic selic rate apy for calculation
+  * @returns {number} poupanca rates apy
+  */
+  private calculatePoupancaFromSelic(selic: number): number {
+    const poupanca = (selic / 100) * this.poupancaPercent;
+    return Number(Number(poupanca).toFixed(2));
+  }
 
-    test('returns the selic, poupanca and cdi rates using default options', async () => {
-      const fakeSelic = 10.1;
-      const fakeData = JSON.stringify([{ valor: fakeSelic }]);
+  /**
+  * Fetch and calculate the brazilian selic, poupanca and cdi rates apy
+  *
+  * @returns {Promise<Rate[]>} Promise with the rate list selic, cdi and poupanca
+  */
+  async getAllRates(): Promise<Rate[]> {
+    const [selic, cdi] = await Promise.all([
+      this.getSelicRate(),
+      this.getCdiRate(),
+    ]);
+    const poupanca = this.calculatePoupancaFromSelic(selic);
+    return [
+      { name: 'Selic', apy: selic },
+      { name: 'CDI', apy: cdi },
+      { name: 'Poupança', apy: poupanca },
+    ];
+  }
 
-      nock(BCB_API).get(BCB_SELIC_PATH).reply(200, fakeData);
+  /**
+  * Fetch brazilian selic rates apy
+  *
+  * @returns {Promise<number>} fetched selic rates apy
+  */
+  async getSelicRate(): Promise<number> {
+    const selic = await fetchCurrentSelic();
+    return Number(Number(selic).toFixed(2));
+  }
 
-      const expectedSelic = Number(Number(fakeSelic).toFixed(2));
-      const expectedCdi = Number(Number(fakeSelic - CDI_SCORE).toFixed(2));
-      const expectedPoupanca = Number(Number((fakeSelic / 100) * POUPANCA_PERCENT).toFixed(2));
-      const selic = new Selic();
-      const rates = await selic.getAllRates();
-      expect(rates[0].name).toBe('Selic');
-      expect(rates[0].apy).toBe(expectedSelic);
-      expect(rates[1].name).toBe('CDI');
-      expect(rates[1].apy).toBe(expectedCdi);
-      expect(rates[2].name).toBe('Poupança');
-      expect(rates[2].apy).toBe(expectedPoupanca);
-    });
+  /**
+  * Fetch cdi rate apy
+  *
+  * @returns {Promise<number>} fetched cdi rates apy
+  */
+  async getCdiRate(): Promise<number> {
+    const cdi = await fetchCurrentCdi();
+    return Number(Number(cdi).toFixed(2));
+  }
 
-    test('raises error when bcb scraps parse fail', async () => {
-      const fakeData = '<>INVALID</>';
-
-      nock(BCB_API).get(BCB_SELIC_PATH).reply(200, fakeData);
-
-      const selic = new Selic();
-
-      await expect(selic.getAllRates()).rejects.toThrow('Parse error');
-    });
-
-    test('raises error when bcb scraps fail', async () => {
-      nock(BCB_API).get(BCB_SELIC_PATH).replyWithError('Api fails');
-
-      const selic = new Selic();
-
-      await expect(selic.getAllRates()).rejects.toThrow('Request error');
-    });
-  });
-
-  describe('.getSelicRate', () => {
-    test('returns the selic rates when bcb scraps succeed', async () => {
-      const fakeSelic = 10.1111;
-      const fakeData = JSON.stringify([{ valor: fakeSelic }]);
-
-      nock(BCB_API).get(BCB_SELIC_PATH).reply(200, fakeData);
-
-      const selic = new Selic();
-
-      const value = await selic.getSelicRate();
-      const expected = Number(Number(fakeSelic).toFixed(2));
-      expect(value).toBe(expected);
-    });
-
-    test('raises error when bcb scraps parse fail', async () => {
-      const fakeData = '<>INVALID</>';
-
-      nock(BCB_API).get(BCB_SELIC_PATH).reply(200, fakeData);
-
-      const selic = new Selic();
-
-      await expect(selic.getSelicRate()).rejects.toThrow('Parse error');
-    });
-
-    test('raises error when bcb scraps fail', async () => {
-      nock(BCB_API).get(BCB_SELIC_PATH).replyWithError('Api fails');
-
-      const selic = new Selic();
-
-      await expect(selic.getSelicRate()).rejects.toThrow('Request error');
-    });
-  });
-
-  describe('.getCdiRate', () => {
-    test('returns the selic rates when bcb scraps succeed', async () => {
-      const fakeSelic = 10.1111;
-      const fakeData = JSON.stringify([{ valor: fakeSelic }]);
-
-      nock(BCB_API).get(BCB_SELIC_PATH).reply(200, fakeData);
-
-      const selic = new Selic();
-
-      const value = await selic.getCdiRate();
-      const expected = Number(Number(fakeSelic - CDI_SCORE).toFixed(2));
-      expect(value).toBe(expected);
-    });
-
-    test('raises error when bcb scraps parse fail', async () => {
-      const fakeData = '<>INVALID</>';
-
-      nock(BCB_API).get(BCB_SELIC_PATH).reply(200, fakeData);
-
-      const selic = new Selic();
-
-      await expect(selic.getCdiRate()).rejects.toThrow('Parse error');
-    });
-
-    test('raises error when bcb scraps fail', async () => {
-      nock(BCB_API).get(BCB_SELIC_PATH).replyWithError('Api fails');
-
-      const selic = new Selic();
-
-      await expect(selic.getCdiRate()).rejects.toThrow('Request error');
-    });
-  });
-
-  describe('.getPoupancaRate', () => {
-    test('returns the selic rates when bcb scraps succeed', async () => {
-      const fakeSelic = 10.1111;
-      const fakeData = JSON.stringify([{ valor: fakeSelic }]);
-
-      nock(BCB_API).get(BCB_SELIC_PATH).reply(200, fakeData);
-
-      const selic = new Selic();
-
-      const value = await selic.getPoupancaRate();
-      const expected = Number(Number((fakeSelic / 100) * POUPANCA_PERCENT).toFixed(2));
-      expect(value).toBe(expected);
-    });
-
-    test('raises error when bcb scraps parse fail', async () => {
-      const fakeData = '<>INVALID</>';
-
-      nock(BCB_API).get(BCB_SELIC_PATH).reply(200, fakeData);
-
-      const selic = new Selic();
-
-      await expect(selic.getPoupancaRate()).rejects.toThrow('Parse error');
-    });
-
-    test('raises error when bcb scraps fail', async () => {
-      nock(BCB_API).get(BCB_SELIC_PATH).replyWithError('Api fails');
-
-      const selic = new Selic();
-
-      await expect(selic.getPoupancaRate()).rejects.toThrow('Request error');
-    });
-  });
-});
+  /**
+  * Fetch and calculate poupanca rate from selic value
+  *
+  * @returns {Promise<number>} fetched poupanca rates apy
+  */
+  async getPoupancaRate(): Promise<number> {
+    const selic = await this.getSelicRate();
+    return this.calculatePoupancaFromSelic(selic);
+  }
+}
